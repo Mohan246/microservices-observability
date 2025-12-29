@@ -1,3 +1,6 @@
+# microservices-observability
+This repo is for architectural overview of Microservices-Observability project
+
 # 🛒 Ecommerce Microservices Stack with Observability
 
 This project is a containerized microservices architecture for an ecommerce platform, built with Spring Boot and enhanced with full observability using OpenTelemetry, Prometheus, Grafana, and Jaeger.
