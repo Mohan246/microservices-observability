@@ -1,0 +1,159 @@
+version: '3.8'
+
+services:
+  # =====================
+  # Product Service
+  # =====================
+  product-microservice:
+    build: ./ecommerce
+    container_name: product-microservice
+    networks:
+      - ecommerce-net
+
+    ports:
+      - "8081:8080"   # host:container
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/productdb
+      - SPRING_DATASOURCE_USERNAME=****
+      - SPRING_DATASOURCE_PASSWORD=****
+      - SPRING_PROFILES_ACTIVE=docker      
+      - MANAGEMENT_OTLP_METRICS_EXPORT_URL=http://otel-collector:4318/v1/metrics
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=product-microservice
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+      - SPRING_JPA_SHOW_SQL=true
+      - SPRING_JPA_PROPERTIES_HIBERNATE_FORMAT_SQL=true
+      - SPRING_JPA_DATABASE_PLATFORM=org.hibernate.dialect.MySQL8Dialect
+    depends_on:
+        mysql:
+          condition: service_healthy
+        otel-collector:
+          condition: service_started
+
+
+  # =====================
+  # Order Service
+  # =====================
+  order-microservice:
+    build: ./order-service
+    container_name: order-microservice
+    networks:
+      - ecommerce-net
+    ports:
+      - "8082:8080"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/orderdb
+      - SPRING_DATASOURCE_USERNAME=****
+      - SPRING_DATASOURCE_PASSWORD=****
+      - SPRING_PROFILES_ACTIVE=docker    
+      - MANAGEMENT_OTLP_METRICS_EXPORT_URL=http://otel-collector:4318/v1/metrics
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=order-microservice
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+      - SPRING_JPA_SHOW_SQL=true
+      - SPRING_JPA_PROPERTIES_HIBERNATE_FORMAT_SQL=true
+      - SPRING_JPA_DATABASE_PLATFORM=org.hibernate.dialect.MySQL8Dialect
+    depends_on:
+      - mysql
+      - otel-collector
+  api-gateway:
+    build: ./api-gateway
+    container_name: api-gateway
+    networks:
+      - ecommerce-net
+    ports:
+      - "8080:8080"
+    depends_on:
+      - product-microservice
+      - order-microservice
+
+
+
+
+  # =====================
+  # MySQL Database
+  # =====================
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    networks:
+      - ecommerce-net
+    environment:
+      MYSQL_ROOT_PASSWORD: smart
+      MYSQL_DATABASE: productdb
+    ports:
+      - "3307:3306" #changed host port due to running mysql8 service in my local
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: [ "CMD", "mysqladmin" ,"ping", "-h", "127.0.0.1" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # =====================
+  # Prometheus
+  # =====================
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus_for_ecommerce_ms
+    networks:
+      - ecommerce-net
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    depends_on:
+      - product-microservice
+      - order-microservice
+  # =====================
+  # Grafana
+  # =====================
+  grafana:
+    image: grafana/grafana
+    container_name: grafana_for_ecommerce_ms
+    networks:
+      - ecommerce-net
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./monitoring/grafana:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+
+  # =====================
+  # Jaeger (for tracing)
+  # =====================
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    container_name: jaeger_for_ecommerce_ms
+    networks:
+      - ecommerce-net
+    ports:
+      - "16686:16686"   # Jaeger UI
+     
+  # =====================
+  # OpenTelemetry Collector
+  # =====================
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.108.0
+    container_name: otel-collector
+    networks:
+      - ecommerce-net
+    volumes:
+      - ./monitoring/otel-collector-config.yml:/etc/otel-collector-config.yml
+    command: ["--config=/etc/otel-collector-config.yml"]
+    ports:
+      - "8888:8888"
+      - "9464:9464"
+      - "4317:4317"     # OTLP gRPC
+      - "4318:4318"     # OTLP HTTP
+    depends_on:
+      - jaeger
+
+
+volumes:
+  mysql_data:
+
+networks:
+   ecommerce-net:
+
