@@ -127,10 +127,6 @@ End-to-end request tracing across gateway and downstream services.
 
 Sample configuration files are provided for reference only.
 
-- No secrets
-- No endpoints
-- No credentials
-
 ➡️ See: `/configs`
 
 ---
